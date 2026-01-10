@@ -832,3 +832,53 @@ uint8_t GCS_MAVLINK_Sub::send_available_mode(uint8_t index) const
 
     return mode_count;
 }
+}
+
+void GCS_MAVLINK_Sub::send_water_depth()
+{
+    // 1. Get the Rangefinder (Sonar)
+    // We only care about downward facing sensors (Pitch 270)
+    const RangeFinder *rng = AP::rangefinder();
+    if (!rng->has_data_orient(ROTATION_PITCH_270)) {
+        return;
+    }
+
+    // 2. Get the specific sensor instance associated with that orientation
+    const uint8_t id = rng->get_mav_distance_sensor_type_orient(ROTATION_PITCH_270);
+    
+    // 3. Get Location & Attitude Data (from AHRS)
+    AP_AHRS &ahrs = AP::ahrs();
+    Location loc;
+    if (!ahrs.get_location(loc)) {
+        // If we don't have a GPS lock, we can't fully populate the lat/lng,
+        // but we might still want to send the message with 0s or just return.
+        // Usually, we zero-init if invalid.
+        loc.zero(); 
+    }
+
+    // 4. Get Temperature (from Barometer)
+    // We use the external temperature if available to measure water temp
+    float temperature = AP::baro().get_external_temperature();
+
+    // 5. Pack and Send the MAVLink message
+    // definition: mavlink_msg_water_depth_send(
+    //    chan, time_boot_ms, id, healthy, lat, lng, alt, roll, pitch, yaw, distance, temperature)
+    
+    float roll, pitch, yaw;
+    ahrs.get_rotation_body_to_ned().to_euler(&roll, &pitch, &yaw);
+    
+    mavlink_msg_water_depth_send(
+        chan,                                   // Current MAVLink channel
+        AP_HAL::millis(),                       // time_boot_ms
+        id,                                     // id
+        (uint8_t)rng->status_orient(ROTATION_PITCH_270),     // healthy
+        loc.lat,                                // lat
+        loc.lng,                                // lng
+        loc.alt * 0.01f,                        // alt (convert cm to meters)
+        roll,                                   // roll
+        pitch,                                  // pitch
+        yaw,                                    // yaw
+        rng->distance_orient(ROTATION_PITCH_270) * 0.01f, // distance (convert cm to m)
+        temperature                             // temperature
+    );
+}
