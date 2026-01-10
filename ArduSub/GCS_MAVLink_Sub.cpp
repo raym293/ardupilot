@@ -832,7 +832,6 @@ uint8_t GCS_MAVLINK_Sub::send_available_mode(uint8_t index) const
 
     return mode_count;
 }
-}
 
 void GCS_MAVLINK_Sub::send_water_depth()
 {
